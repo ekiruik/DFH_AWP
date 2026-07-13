@@ -117,6 +117,7 @@
   .config-warning code{background:#fff2c2;padding:1px 5px;border-radius:3px;}
   .footnote{margin-top:24px;font-size:11.5px;color:var(--muted);}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -147,20 +148,30 @@
 
   <div class="template-download">
     <div>
-      <div class="label">Blank Annual Work Plan Template</div>
-      <div class="sub">Download the empty .xlsx template to plan offline or share with a colleague</div>
+      <div class="label">Bulk Upload Template</div>
+      <div class="sub">Download this .xlsx, fill in as many activity rows as you like offline, then use "Bulk Upload Data" below to push them all in at once</div>
     </div>
     <a class="dl-btn" id="templateDownloadLink" href="#" aria-disabled="true">&#8681; No template uploaded yet</a>
   </div>
 
   <div class="template-upload">
     <div class="label">Replace the Template</div>
-    <div class="sub">Upload a new/updated .xlsx and it becomes the file the Download button above points to (saved to Google Drive on this Sheet's account)</div>
+    <div class="sub">Upload a new/updated blank .xlsx and it becomes the file the Download button above points to (saved to Google Drive on this Sheet's account)</div>
     <div class="template-upload-row">
       <input type="file" id="templateFile" accept=".xlsx,.xls">
       <button type="button" class="btn-secondary" id="uploadTemplateBtn">Upload Template</button>
     </div>
     <div class="upload-status" id="uploadStatus"></div>
+  </div>
+
+  <div class="template-upload">
+    <div class="label">Bulk Upload Data</div>
+    <div class="sub">Upload a filled-in copy of the Bulk Upload Template — every row on its "Bulk Upload" sheet gets added to the matching division automatically</div>
+    <div class="template-upload-row">
+      <input type="file" id="bulkFile" accept=".xlsx,.xls">
+      <button type="button" class="btn-secondary" id="bulkUploadBtn">Bulk Upload Data</button>
+    </div>
+    <div class="upload-status" id="bulkStatus"></div>
   </div>
 
   <div class="tabs" id="tabs"></div>
@@ -538,6 +549,156 @@ document.getElementById("uploadTemplateBtn").addEventListener("click", async () 
     btn.disabled = false;
     btn.textContent = "Upload Template";
   }
+});
+
+// ---------- Bulk data upload ----------
+const DIVISION_BY_FULL_NAME = Object.fromEntries(DIVISIONS.map(d => [d.full.trim().toLowerCase(), d.key]));
+
+function readWorkbook(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: "array" });
+        resolve(wb);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error("Could not read the file"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function parseBulkRows(workbook) {
+  const sheetName = workbook.SheetNames.includes("Bulk Upload") ? "Bulk Upload" : workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" });
+
+  // Expected header row: Division, Section, Unit, Objective, Activity, Description of Activities,
+  // Output, Target, Means of Verification, Amount (KES), Source of Funds, Jul..Jun
+  const dataRows = rows.slice(1); // skip header row
+  const parsed = [];
+  dataRows.forEach((row, idx) => {
+    const activity = (row[4] || "").toString().trim();
+    if (!activity) return; // skip blank rows (including the italic example row if untouched)
+    const divisionFull = (row[0] || "").toString().trim();
+    const divisionKey = DIVISION_BY_FULL_NAME[divisionFull.toLowerCase()];
+    const months = [];
+    MONTHS.forEach((m, mi) => {
+      const cell = (row[11 + mi] || "").toString().trim().toUpperCase();
+      if (cell === "X") months.push(m);
+    });
+    parsed.push({
+      rowNumber: idx + 2, // +2 = skipped header + 0-index offset
+      divisionFull,
+      division: divisionKey,
+      section: row[1] || "",
+      unit: row[2] || "",
+      objective: row[3] || "",
+      activity,
+      description: row[5] || "",
+      output: row[6] || "",
+      target: row[7] || "",
+      mov: row[8] || "",
+      amount: row[9] || 0,
+      sourceOfFunds: row[10] || "",
+      months,
+    });
+  });
+  return parsed;
+}
+
+async function submitBulkRow(row) {
+  const params = new URLSearchParams({
+    action: "add",
+    division: row.division,
+    section: row.section,
+    unit: row.unit,
+    objective: row.objective,
+    activity: row.activity,
+    description: row.description,
+    output: row.output,
+    target: row.target,
+    mov: row.mov,
+    amount: String(row.amount || 0),
+    sourceOfFunds: row.sourceOfFunds,
+    months: row.months.join(","),
+  });
+  const res = await fetch(`${WEBAPP_URL}?${params.toString()}`);
+  return res.json();
+}
+
+document.getElementById("bulkUploadBtn").addEventListener("click", async () => {
+  const fileInput = document.getElementById("bulkFile");
+  const statusEl = document.getElementById("bulkStatus");
+  const btn = document.getElementById("bulkUploadBtn");
+
+  if (!apiConfigured()) {
+    statusEl.textContent = "Connect the Apps Script API first (see the yellow notice above).";
+    return;
+  }
+  const file = fileInput.files[0];
+  if (!file) {
+    statusEl.textContent = "Choose a filled-in Bulk Upload Template file first.";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Reading file...";
+  statusEl.textContent = "Parsing rows...";
+
+  let rows;
+  try {
+    const workbook = await readWorkbook(file);
+    rows = parseBulkRows(workbook);
+  } catch (e) {
+    statusEl.textContent = `Could not read this file (${e.message}). Make sure it's a .xlsx built from the Bulk Upload Template.`;
+    btn.disabled = false;
+    btn.textContent = "Bulk Upload Data";
+    return;
+  }
+
+  if (rows.length === 0) {
+    statusEl.textContent = "No filled-in rows found — check that Activity (column E) is filled in for each row.";
+    btn.disabled = false;
+    btn.textContent = "Bulk Upload Data";
+    return;
+  }
+
+  const unknownDivisionRows = rows.filter(r => !r.division);
+  if (unknownDivisionRows.length > 0) {
+    statusEl.textContent = `Row ${unknownDivisionRows[0].rowNumber}: Division "${unknownDivisionRows[0].divisionFull}" doesn't match any known division exactly. Fix it and re-upload. No rows were added.`;
+    btn.disabled = false;
+    btn.textContent = "Bulk Upload Data";
+    return;
+  }
+
+  let succeeded = 0;
+  let failed = [];
+  for (let i = 0; i < rows.length; i++) {
+    btn.textContent = `Uploading ${i + 1} / ${rows.length}...`;
+    statusEl.textContent = `Uploading row ${i + 1} of ${rows.length} (${rows[i].activity})...`;
+    try {
+      const data = await submitBulkRow(rows[i]);
+      if (data.status === "ok") {
+        succeeded++;
+      } else {
+        failed.push(`Row ${rows[i].rowNumber}: ${data.message || "unknown error"}`);
+      }
+    } catch (e) {
+      failed.push(`Row ${rows[i].rowNumber}: ${e.message}`);
+    }
+  }
+
+  statusEl.textContent = failed.length === 0
+    ? `Done — ${succeeded} of ${rows.length} rows added successfully.`
+    : `${succeeded} of ${rows.length} rows added. ${failed.length} failed: ${failed.slice(0, 3).join(" | ")}${failed.length > 3 ? " ..." : ""}`;
+
+  btn.disabled = false;
+  btn.textContent = "Bulk Upload Data";
+  fileInput.value = "";
+  await loadEntries();
 });
 
 // ---------- Init ----------

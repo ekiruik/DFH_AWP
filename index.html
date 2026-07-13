@@ -42,6 +42,9 @@
     background:var(--navy);color:#fff;text-decoration:none;
     border-radius:7px;padding:9px 16px;font-size:13px;font-weight:700;
   }
+  .template-download a.dl-btn[aria-disabled="true"]{
+    background:#c3c9d1;color:#6b7280;cursor:default;pointer-events:none;
+  }
 
   .template-upload{
     background:var(--card);border:1px solid var(--line);border-radius:8px;
@@ -147,7 +150,7 @@
       <div class="label">Blank Annual Work Plan Template</div>
       <div class="sub">Download the empty .xlsx template to plan offline or share with a colleague</div>
     </div>
-    <a class="dl-btn" id="templateDownloadLink" href="https://github.com/ekiruik/DFH_AWP/raw/main/MOH_Annual_Work_Plan_Template.xlsx" download>&#8681; Download Template</a>
+    <a class="dl-btn" id="templateDownloadLink" href="#" aria-disabled="true">&#8681; No template uploaded yet</a>
   </div>
 
   <div class="template-upload">
@@ -456,17 +459,24 @@ function refreshUI() {
 }
 
 // ---------- Template upload / download ----------
+function activateTemplateLink(url) {
+  const link = document.getElementById("templateDownloadLink");
+  link.href = url;
+  link.setAttribute("download", "");
+  link.removeAttribute("aria-disabled");
+  link.textContent = "\u2b07 Download Template";
+}
+
 async function loadTemplateLink() {
   if (!apiConfigured()) return;
   try {
     const res = await fetch(`${WEBAPP_URL}?action=getTemplateLink`);
     const data = await res.json();
     if (data.status === "ok" && data.url) {
-      document.getElementById("templateDownloadLink").href = data.url;
-      document.getElementById("templateDownloadLink").removeAttribute("download");
+      activateTemplateLink(data.url);
     }
   } catch (e) {
-    // silently keep the default GitHub link if this check fails
+    // keep the "No template uploaded yet" state if this check fails
   }
 }
 
@@ -519,8 +529,7 @@ document.getElementById("uploadTemplateBtn").addEventListener("click", async () 
     }
     if (data.status !== "ok") throw new Error(data.message || "Upload failed");
 
-    document.getElementById("templateDownloadLink").href = data.url;
-    document.getElementById("templateDownloadLink").removeAttribute("download");
+    activateTemplateLink(data.url);
     statusEl.textContent = "Uploaded — the Download Template button above now points to this file.";
     fileInput.value = "";
   } catch (e) {

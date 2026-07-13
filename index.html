@@ -85,13 +85,6 @@
   .config-warning{background:#fff8e1;border:1px solid #f0d878;border-radius:6px;padding:12px 16px;color:#6b5900;margin-bottom:24px;}
   .config-warning code{background:#fff2c2;padding:1px 5px;border-radius:3px;}
   .footnote{margin-top:24px;font-size:11.5px;color:var(--muted);}
-  .template-box{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:20px;}
-  .template-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-  .template-row input[type="file"]{font-size:12.5px;}
-  .btn-secondary{background:#fff;border:1px solid var(--navy);color:var(--navy);border-radius:7px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;}
-  .btn-secondary:disabled{opacity:.6;cursor:default;}
-  .template-link{font-size:13px;font-weight:600;}
-  .template-status{font-size:12.5px;color:var(--muted);margin-top:8px;}
 </style>
 </head>
 <body>
@@ -187,16 +180,9 @@
   </div>
   <div class="table-wrap"><table id="matrixTable"></table></div>
 
-  <div class="template-box">
-    <div class="section-label" style="margin-bottom:10px;border-bottom:none;padding-bottom:0;">Annual Work Plan Template</div>
-    <div class="template-row">
-      <input type="file" id="templateFile" accept=".xlsx,.xls">
-      <button type="button" class="btn-secondary" id="uploadTemplateBtn">Upload Template</button>
-      <span id="templateLinkWrap"></span>
-    </div>
-    <div class="template-status" id="templateStatus">Checking for an existing template...</div>
+  <div class="footnote">
+    <a href="https://github.com/ekiruik/DFH_AWP/raw/main/MOH_Annual_Work_Plan_Template.xlsx" style="color:var(--navy);font-weight:600;">Download the blank Annual Work Plan template (.xlsx)</a>
   </div>
-
   <div class="footnote">Entries write directly into your Google Sheet's division tabs via the Apps Script API — everyone using this page shares the same data.</div>
 
 </main>
@@ -426,97 +412,12 @@ function refreshUI() {
   renderMatrix();
 }
 
-// ---------- Template upload / download ----------
-function renderTemplateLink(url) {
-  const wrap = document.getElementById("templateLinkWrap");
-  if (url) {
-    wrap.innerHTML = `<a class="template-link" href="${url}" target="_blank" rel="noopener">Download current template</a>`;
-  } else {
-    wrap.innerHTML = "";
-  }
-}
-
-async function loadTemplateLink() {
-  const statusEl = document.getElementById("templateStatus");
-  if (!apiConfigured()) {
-    statusEl.textContent = "Connect the Apps Script API first (see the yellow notice above) to upload or fetch the template.";
-    return;
-  }
-  try {
-    const res = await fetch(`${WEBAPP_URL}?action=getTemplateLink`);
-    const data = await res.json();
-    if (data.status === "ok" && data.url) {
-      renderTemplateLink(data.url);
-      statusEl.textContent = "A template is available below.";
-    } else {
-      statusEl.textContent = "No template uploaded yet — choose a file and click Upload Template.";
-    }
-  } catch (e) {
-    statusEl.textContent = `Could not check for a template (${e.message}).`;
-  }
-}
-
-document.getElementById("uploadTemplateBtn").addEventListener("click", async () => {
-  const fileInput = document.getElementById("templateFile");
-  const statusEl = document.getElementById("templateStatus");
-  const btn = document.getElementById("uploadTemplateBtn");
-
-  if (!apiConfigured()) {
-    statusEl.textContent = "Connect the Apps Script API first (see the yellow notice above).";
-    return;
-  }
-  const file = fileInput.files[0];
-  if (!file) {
-    statusEl.textContent = "Choose a file first.";
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = "Uploading...";
-  statusEl.textContent = "Reading file...";
-
-  try {
-    const dataUrl = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-    const base64 = dataUrl.split(",")[1];
-
-    statusEl.textContent = "Uploading to Google Drive...";
-
-    const res = await fetch(WEBAPP_URL, {
-      method: "POST",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({
-        action: "uploadTemplate",
-        filename: file.name,
-        mimeType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        base64: base64,
-      }),
-    });
-    const data = await res.json();
-    if (data.status !== "ok") throw new Error(data.message || "Upload failed");
-
-    renderTemplateLink(data.url);
-    statusEl.textContent = "Uploaded. The link above now points to this file.";
-    fileInput.value = "";
-  } catch (e) {
-    statusEl.textContent = `Upload failed (${e.message}).`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = "Upload Template";
-  }
-});
-
 // ---------- Init ----------
 document.getElementById("configWarning").style.display = apiConfigured() ? "none" : "block";
 renderTabs();
 renderMonths();
 refreshUI();
 loadEntries();
-loadTemplateLink();
 </script>
 
 </body>

@@ -43,6 +43,21 @@
     border-radius:7px;padding:9px 16px;font-size:13px;font-weight:700;
   }
 
+  .template-upload{
+    background:var(--card);border:1px solid var(--line);border-radius:8px;
+    padding:16px 20px;margin-bottom:22px;
+  }
+  .template-upload .label{font-size:14px;font-weight:700;color:var(--navy-deep);margin-bottom:2px;}
+  .template-upload .sub{font-size:12px;color:var(--muted);margin-bottom:10px;}
+  .template-upload-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+  .template-upload-row input[type="file"]{font-size:12.5px;max-width:260px;}
+  .btn-secondary{
+    background:#fff;border:1px solid var(--navy);color:var(--navy);
+    border-radius:7px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;
+  }
+  .btn-secondary:disabled{opacity:.6;cursor:default;}
+  .upload-status{font-size:12px;color:var(--muted);margin-top:8px;}
+
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px 24px;margin-bottom:28px;}
   .card h2{margin:0 0 4px;font-size:16px;color:var(--navy-deep);}
   .card .sub{font-size:12px;color:var(--muted);}
@@ -132,7 +147,17 @@
       <div class="label">Blank Annual Work Plan Template</div>
       <div class="sub">Download the empty .xlsx template to plan offline or share with a colleague</div>
     </div>
-    <a class="dl-btn" href="https://github.com/ekiruik/DFH_AWP/raw/main/MOH_Annual_Work_Plan_Template.xlsx" download>&#8681; Download Template</a>
+    <a class="dl-btn" id="templateDownloadLink" href="https://github.com/ekiruik/DFH_AWP/raw/main/MOH_Annual_Work_Plan_Template.xlsx" download>&#8681; Download Template</a>
+  </div>
+
+  <div class="template-upload">
+    <div class="label">Replace the Template</div>
+    <div class="sub">Upload a new/updated .xlsx and it becomes the file the Download button above points to (saved to Google Drive on this Sheet's account)</div>
+    <div class="template-upload-row">
+      <input type="file" id="templateFile" accept=".xlsx,.xls">
+      <button type="button" class="btn-secondary" id="uploadTemplateBtn">Upload Template</button>
+    </div>
+    <div class="upload-status" id="uploadStatus"></div>
   </div>
 
   <div class="tabs" id="tabs"></div>
@@ -430,12 +455,89 @@ function refreshUI() {
   renderMatrix();
 }
 
+// ---------- Template upload / download ----------
+async function loadTemplateLink() {
+  if (!apiConfigured()) return;
+  try {
+    const res = await fetch(`${WEBAPP_URL}?action=getTemplateLink`);
+    const data = await res.json();
+    if (data.status === "ok" && data.url) {
+      document.getElementById("templateDownloadLink").href = data.url;
+      document.getElementById("templateDownloadLink").removeAttribute("download");
+    }
+  } catch (e) {
+    // silently keep the default GitHub link if this check fails
+  }
+}
+
+document.getElementById("uploadTemplateBtn").addEventListener("click", async () => {
+  const fileInput = document.getElementById("templateFile");
+  const statusEl = document.getElementById("uploadStatus");
+  const btn = document.getElementById("uploadTemplateBtn");
+
+  if (!apiConfigured()) {
+    statusEl.textContent = "Connect the Apps Script API first (see the yellow notice above).";
+    return;
+  }
+  const file = fileInput.files[0];
+  if (!file) {
+    statusEl.textContent = "Choose a file first.";
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "Uploading...";
+  statusEl.textContent = "Reading file...";
+
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(new Error("Could not read the file"));
+      reader.readAsDataURL(file);
+    });
+    const base64 = dataUrl.split(",")[1];
+
+    statusEl.textContent = "Uploading to Google Drive...";
+
+    const res = await fetch(WEBAPP_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        action: "uploadTemplate",
+        filename: file.name,
+        mimeType: file.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        base64: base64,
+      }),
+    });
+
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Server returned an unexpected response (HTTP ${res.status}). Check that the Apps Script was redeployed as a new version.`);
+    }
+    if (data.status !== "ok") throw new Error(data.message || "Upload failed");
+
+    document.getElementById("templateDownloadLink").href = data.url;
+    document.getElementById("templateDownloadLink").removeAttribute("download");
+    statusEl.textContent = "Uploaded — the Download Template button above now points to this file.";
+    fileInput.value = "";
+  } catch (e) {
+    statusEl.textContent = `Upload failed: ${e.message}`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Upload Template";
+  }
+});
+
 // ---------- Init ----------
 document.getElementById("configWarning").style.display = apiConfigured() ? "none" : "block";
 renderTabs();
 renderMonths();
 refreshUI();
 loadEntries();
+loadTemplateLink();
 </script>
 
 </body>

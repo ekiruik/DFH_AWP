@@ -30,6 +30,19 @@
   .tab{padding:9px 14px;border-radius:7px;border:1px solid var(--line);background:#fff;color:#334;font-size:13px;font-weight:600;cursor:pointer;}
   .tab.active{background:var(--navy);border-color:var(--navy);color:#fff;}
 
+  .template-download{
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+    background:var(--card);border:1px solid var(--line);border-left:5px solid var(--navy);
+    border-radius:8px;padding:16px 20px;margin-bottom:22px;
+  }
+  .template-download .label{font-size:14px;font-weight:700;color:var(--navy-deep);}
+  .template-download .sub{font-size:12px;color:var(--muted);margin-top:2px;}
+  .template-download a.dl-btn{
+    flex-shrink:0;display:inline-flex;align-items:center;gap:8px;
+    background:var(--navy);color:#fff;text-decoration:none;
+    border-radius:7px;padding:9px 16px;font-size:13px;font-weight:700;
+  }
+
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px 24px;margin-bottom:28px;}
   .card h2{margin:0 0 4px;font-size:16px;color:var(--navy-deep);}
   .card .sub{font-size:12px;color:var(--muted);}
@@ -114,6 +127,14 @@
     <strong>Before this works:</strong> deploy the Apps Script API in your Google Sheet and paste its Web App URL into <code>WEBAPP_URL</code> near the top of this file, then push to GitHub.
   </div>
 
+  <div class="template-download">
+    <div>
+      <div class="label">Blank Annual Work Plan Template</div>
+      <div class="sub">Download the empty .xlsx template to plan offline or share with a colleague</div>
+    </div>
+    <a class="dl-btn" href="https://github.com/ekiruik/DFH_AWP/raw/main/MOH_Annual_Work_Plan_Template.xlsx" download>&#8681; Download Template</a>
+  </div>
+
   <div class="tabs" id="tabs"></div>
 
   <form class="card" id="entryForm">
@@ -180,9 +201,6 @@
   </div>
   <div class="table-wrap"><table id="matrixTable"></table></div>
 
-  <div class="footnote">
-    <a href="https://github.com/ekiruik/DFH_AWP/raw/main/MOH_Annual_Work_Plan_Template.xlsx" style="color:var(--navy);font-weight:600;">Download the blank Annual Work Plan template (.xlsx)</a>
-  </div>
   <div class="footnote">Entries write directly into your Google Sheet's division tabs via the Apps Script API — everyone using this page shares the same data.</div>
 
 </main>
